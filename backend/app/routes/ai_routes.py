@@ -5,13 +5,12 @@ from fastapi import APIRouter, Header, Query
 from app.routes.auth_routes import verify_token
 from app.database import boards_collection
 
-import google.generativeai as genai
+from google import genai
 from google.api_core.exceptions import ResourceExhausted
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash")
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -115,7 +114,10 @@ Generate a concise, professional standup summary with these sections:
 Format in markdown. Keep it concise and actionable. Use ticket numbers (#1, #2, etc).
 Do NOT wrap in code fences. Just return the markdown directly."""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
         return {"summary": response.text, "source": "ai"}
 
     except (ResourceExhausted, Exception) as e:
@@ -224,7 +226,10 @@ Give a brief, actionable risk assessment in markdown:
 Keep it to 3-5 bullet points maximum. Be direct and specific. Use ticket numbers.
 Do NOT wrap in code fences."""
 
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
             ai_summary = response.text
             source = "ai"
 

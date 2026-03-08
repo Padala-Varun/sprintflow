@@ -7,13 +7,12 @@ from typing import Optional, List
 from app.routes.auth_routes import verify_token
 from app.database import users_collection, boards_collection
 
-import google.generativeai as genai
+from google import genai
 from google.api_core.exceptions import ResourceExhausted
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash")
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter(prefix="/github", tags=["github"])
 
@@ -199,7 +198,10 @@ Return ONLY valid JSON in this exact format:
 If no matches are found, return {{"matches": [], "summary": "No commits match current tickets."}}.
 Only return JSON, no explanation outside the JSON."""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
         raw = response.text.strip()
 
         # Parse AI response

@@ -3,14 +3,13 @@ import time
 import json
 from collections import defaultdict, deque
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from google.api_core.exceptions import ResourceExhausted
 
 load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel("gemini-2.5-flash")
+client = genai.Client(api_key=api_key)
 
 
 def local_prioritize(tickets):
@@ -100,7 +99,10 @@ Return ONLY valid JSON like this:
 Do not include explanation.
 Only return JSON.
 """
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
             return response.text
 
         except ResourceExhausted:

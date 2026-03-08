@@ -4,14 +4,14 @@ from bson import ObjectId
 from datetime import datetime
 import re
 import os
-import google.generativeai as genai
+from google import genai
 from app.routes.auth_routes import verify_token
 from app.database import users_collection, workspaces_collection, meetings_collection
 
 router = APIRouter(tags=["meetings"])
 
 # Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 # ─── Helpers ──────────────────────────────
@@ -120,23 +120,10 @@ def end_meeting(meeting_id: str, authorization: str = Header(None)):
 
         # Generate AI summary
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            prompt = f"""You are a meeting notes summarizer. Below is a transcript from a standup meeting titled "{meeting['title']}" for workspace "{meeting['workspace_name']}".
-
-Each line is tagged with the speaker's email and timestamp.
-
-Transcript:
-{full_transcript}
-
-Please generate a concise, well-organized meeting summary that includes:
-1. **Attendees** — who participated
-2. **Key Discussion Points** — main topics discussed
-3. **Action Items** — things people committed to doing
-4. **Decisions Made** — any decisions that were reached
-
-Keep it concise and professional. Use markdown formatting."""
-
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
             ai_summary = response.text
         except Exception as e:
             print(f"[AI Summary Error] {e}")
