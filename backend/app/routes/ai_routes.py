@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, Header, Query
 from app.routes.auth_routes import verify_token
-from app.database import boards_collection
+from app.database import boards_collection, users_collection, workspaces_collection
 
 from google import genai
 from google.api_core.exceptions import ResourceExhausted
@@ -244,3 +244,85 @@ Do NOT wrap in code fences."""
                 source = "local"
 
     return {"risks": risks, "ai_summary": ai_summary, "source": source}
+
+
+# ─── Workspace Analytics ────────────────────────────────────────────────────
+
+@router.get("/analytics")
+def workspace_analytics(workspace_id: str = Query(...), authorization: str = Header(None)):
+    """Get aggregated analytics for a workspace — all members' boards combined."""
+    user = verify_token(authorization)
+
+    from bson import ObjectId
+
+    workspace = workspaces_collection.find_one({"_id": ObjectId(workspace_id)})
+    if not workspace:
+        return {"error": "Workspace not found"}
+
+    member_ids = workspace.get("members", [])
+
+    # Build email map
+    email_map = {}
+    for mid in member_ids:
+        u = users_collection.find_one({"_id": ObjectId(mid)}, {"email": 1})
+        if u:
+            email_map[mid] = u["email"]
+
+    # Aggregate stats across all boards
+    status_counts = {"created": 0, "pending": 0, "completed": 0, "not_completed": 0}
+    priority_counts = {"high": 0, "medium": 0, "low": 0}
+    team_workload = []
+    total_tickets = 0
+
+    for mid in member_ids:
+        board = boards_collection.find_one(
+            {"workspace_id": workspace_id, "user_id": mid}, {"_id": 0}
+        )
+        tickets = board.get("tickets", []) if board else []
+        columns = board.get("columns", {}) if board else {}
+
+        member_created = 0
+        member_pending = 0
+        member_completed = 0
+        member_not_completed = 0
+
+        for t in tickets:
+            total_tickets += 1
+            col = columns.get(str(t["id"]), "created")
+            status_counts[col] = status_counts.get(col, 0) + 1
+
+            p = (t.get("priority") or "medium").lower()
+            if p in priority_counts:
+                priority_counts[p] += 1
+
+            if col == "created":
+                member_created += 1
+            elif col == "pending":
+                member_pending += 1
+            elif col == "completed":
+                member_completed += 1
+            elif col == "not_completed":
+                member_not_completed += 1
+
+        member_total = len(tickets)
+        team_workload.append({
+            "user_id": mid,
+            "email": email_map.get(mid, "unknown"),
+            "total": member_total,
+            "completed": member_completed,
+            "pending": member_pending,
+            "created": member_created,
+            "not_completed": member_not_completed,
+            "completion_pct": round((member_completed / member_total) * 100) if member_total > 0 else 0,
+        })
+
+    completion_pct = round((status_counts["completed"] / total_tickets) * 100) if total_tickets > 0 else 0
+
+    return {
+        "total_tickets": total_tickets,
+        "completion_pct": completion_pct,
+        "team_size": len(member_ids),
+        "status": status_counts,
+        "priority": priority_counts,
+        "team": team_workload,
+    }

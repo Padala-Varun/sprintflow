@@ -2472,3 +2472,272 @@ body.dark .confidence-low {
     text-align: center;
     padding: 20px 0;
 }
+
+/* ─── Analytics Dashboard ─────────────────────────────────────────────────── */
+
+.analytics-dashboard {
+    margin-top: 16px;
+    padding: 24px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+/* Stat Cards */
+.stat-card {
+    position: relative;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.stat-card:nth-child(1) { border-top: 3px solid #6366f1; }
+.stat-card:nth-child(2) { border-top: 3px solid #22c55e; }
+.stat-card:nth-child(3) { border-top: 3px solid #f59e0b; }
+.stat-card:nth-child(4) { border-top: 3px solid #8b5cf6; }
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.stat-icon {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-size: 22px;
+    opacity: 0.6;
+}
+
+/* Chart Cards */
+.chart-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+
+.chart-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+/* Donut Chart */
+.chart-donut-card {
+    grid-column: span 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.donut-chart {
+    width: 180px;
+    height: 180px;
+    margin-bottom: 16px;
+}
+
+.donut-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.donut-legend span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Priority Bars */
+.chart-priority-card {
+    grid-column: span 1;
+}
+
+.priority-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.priority-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.priority-bar-label {
+    width: 55px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.priority-bar-track {
+    flex: 1;
+    height: 22px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.priority-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-sm);
+    transition: width 0.6s ease;
+    min-width: 4px;
+}
+
+.priority-bar-count {
+    width: 28px;
+    text-align: right;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Team Workload */
+.chart-team-card {
+    grid-column: span 1;
+}
+
+.team-workload-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.team-workload-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.team-workload-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.team-workload-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.team-workload-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.team-workload-pct {
+    font-size: 12px;
+    font-weight: 700;
+    color: #6366f1;
+}
+
+.team-workload-bar-track {
+    display: flex;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.team-workload-bar-completed {
+    background: #22c55e;
+    transition: width 0.6s ease;
+}
+
+.team-workload-bar-pending {
+    background: #6366f1;
+    transition: width 0.6s ease;
+}
+
+.team-workload-bar-created {
+    background: #94a3b8;
+    transition: width 0.6s ease;
+}
+
+.team-workload-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .analytics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .chart-donut-card {
+        grid-column: span 2;
+    }
+    .chart-priority-card,
+    .chart-team-card {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 600px) {
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
+    .chart-donut-card,
+    .chart-priority-card,
+    .chart-team-card {
+        grid-column: span 1;
+    }
+}

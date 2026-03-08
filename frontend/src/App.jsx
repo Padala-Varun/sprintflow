@@ -771,6 +771,9 @@ export default function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewingMember, setViewingMember] = useState(null); // null = own board
 
+  // Analytics state
+  const [analytics, setAnalytics] = useState(null);
+
   // Active meetings state
   const [activeMeetings, setActiveMeetings] = useState([]);
 
@@ -896,6 +899,17 @@ export default function App() {
   }, [token]);
 
   // Load board (own or member's)
+  const fetchAnalytics = useCallback(async () => {
+    if (!token || !selectedWorkspace) return;
+    try {
+      const res = await fetch(`${API}/ai/analytics?workspace_id=${selectedWorkspace.id}`, { headers: authHeaders(token) });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      }
+    } catch { /* silent */ }
+  }, [token, selectedWorkspace]);
+
   const loadBoard = useCallback(async (memberId) => {
     if (!token || !selectedWorkspace) return;
     try {
@@ -928,6 +942,7 @@ export default function App() {
   useEffect(() => {
     if (!token || !selectedWorkspace) return;
     loadBoard();
+    fetchAnalytics();
     fetchInvitations();
     checkGithubStatus();
     fetchTeamMembers();
@@ -1345,6 +1360,122 @@ export default function App() {
                   {m.is_current_user && <span className="team-member-you">YOU</span>}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Analytics Dashboard ─── */}
+        {analytics && analytics.total_tickets > 0 && (
+          <div className="analytics-dashboard">
+            <div className="section-label"><span className="accent-dot" style={{ background: "#6366f1" }} />📊 Project Analytics</div>
+
+            <div className="analytics-grid">
+              {/* Stat Cards */}
+              <div className="stat-card">
+                <div className="stat-value">{analytics.total_tickets}</div>
+                <div className="stat-label">Total Tickets</div>
+                <div className="stat-icon">🎫</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{analytics.completion_pct}%</div>
+                <div className="stat-label">Completed</div>
+                <div className="stat-icon">✅</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{analytics.team_size}</div>
+                <div className="stat-label">Team Size</div>
+                <div className="stat-icon">👥</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{analytics.status.pending}</div>
+                <div className="stat-label">In Progress</div>
+                <div className="stat-icon">⏳</div>
+              </div>
+
+              {/* Donut Chart — Status Distribution */}
+              <div className="chart-card chart-donut-card">
+                <div className="chart-title">Status Distribution</div>
+                <svg viewBox="0 0 200 200" className="donut-chart">
+                  {(() => {
+                    const s = analytics.status;
+                    const total = s.created + s.pending + s.completed + s.not_completed || 1;
+                    const segments = [
+                      { value: s.created, color: "#94a3b8", label: "Created" },
+                      { value: s.pending, color: "#6366f1", label: "Pending" },
+                      { value: s.completed, color: "#22c55e", label: "Completed" },
+                      { value: s.not_completed, color: "#ef4444", label: "Not Done" },
+                    ];
+                    let cumulative = 0;
+                    const R = 70, cx = 100, cy = 100;
+                    return segments.filter(seg => seg.value > 0).map((seg, i) => {
+                      const pct = seg.value / total;
+                      const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                      cumulative += pct;
+                      const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                      const largeArc = pct > 0.5 ? 1 : 0;
+                      const x1 = cx + R * Math.cos(startAngle);
+                      const y1 = cy + R * Math.sin(startAngle);
+                      const x2 = cx + R * Math.cos(endAngle);
+                      const y2 = cy + R * Math.sin(endAngle);
+                      return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${R},${R} 0 ${largeArc},1 ${x2},${y2} Z`} fill={seg.color} opacity="0.85" stroke="white" strokeWidth="2" />;
+                    });
+                  })()}
+                  <circle cx="100" cy="100" r="40" fill="var(--bg-primary)" />
+                  <text x="100" y="96" textAnchor="middle" fontSize="18" fontWeight="700" fill="var(--text-primary)">{analytics.completion_pct}%</text>
+                  <text x="100" y="114" textAnchor="middle" fontSize="10" fill="var(--text-muted)">done</text>
+                </svg>
+                <div className="donut-legend">
+                  <span><span className="legend-dot" style={{ background: "#94a3b8" }} />Created ({analytics.status.created})</span>
+                  <span><span className="legend-dot" style={{ background: "#6366f1" }} />Pending ({analytics.status.pending})</span>
+                  <span><span className="legend-dot" style={{ background: "#22c55e" }} />Done ({analytics.status.completed})</span>
+                  <span><span className="legend-dot" style={{ background: "#ef4444" }} />Failed ({analytics.status.not_completed})</span>
+                </div>
+              </div>
+
+              {/* Priority Breakdown */}
+              <div className="chart-card chart-priority-card">
+                <div className="chart-title">Priority Breakdown</div>
+                <div className="priority-bars">
+                  {[
+                    { label: "High", value: analytics.priority.high, color: "#ef4444" },
+                    { label: "Medium", value: analytics.priority.medium, color: "#f59e0b" },
+                    { label: "Low", value: analytics.priority.low, color: "#22c55e" },
+                  ].map((p) => {
+                    const maxVal = Math.max(analytics.priority.high, analytics.priority.medium, analytics.priority.low, 1);
+                    return (
+                      <div key={p.label} className="priority-bar-row">
+                        <span className="priority-bar-label">{p.label}</span>
+                        <div className="priority-bar-track">
+                          <div className="priority-bar-fill" style={{ width: `${(p.value / maxVal) * 100}%`, background: p.color }} />
+                        </div>
+                        <span className="priority-bar-count">{p.value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Team Workload */}
+              <div className="chart-card chart-team-card">
+                <div className="chart-title">Team Workload</div>
+                <div className="team-workload-list">
+                  {analytics.team.map((m) => (
+                    <div key={m.user_id} className="team-workload-row">
+                      <div className="team-workload-header">
+                        <span className="team-workload-avatar">{m.email[0].toUpperCase()}</span>
+                        <span className="team-workload-name">{m.email.split("@")[0]}</span>
+                        <span className="team-workload-pct">{m.completion_pct}%</span>
+                      </div>
+                      <div className="team-workload-bar-track">
+                        <div className="team-workload-bar-completed" style={{ width: `${m.total > 0 ? (m.completed / m.total) * 100 : 0}%` }} />
+                        <div className="team-workload-bar-pending" style={{ width: `${m.total > 0 ? (m.pending / m.total) * 100 : 0}%` }} />
+                        <div className="team-workload-bar-created" style={{ width: `${m.total > 0 ? (m.created / m.total) * 100 : 0}%` }} />
+                      </div>
+                      <div className="team-workload-meta">{m.completed}/{m.total} tasks done</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
