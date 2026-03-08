@@ -197,14 +197,14 @@ function DependencyGraph({ tickets, ticketColumns }) {
 
   const getNodeColor = (node) => {
     const col = ticketColumns[node.id];
-    if (col === "completed") return "#22c55e";
-    if (col === "not_completed") return "#ef4444";
+    if (col === "completed") return "#059669";
+    if (col === "not_completed") return "#dc2626";
     if (col === "pending") return "#6366f1";
     const lp = (node.priority || "").toLowerCase();
     if (lp === "high") return "#ef4444";
     if (lp === "medium") return "#f59e0b";
-    if (lp === "low") return "#22c55e";
-    return "#64748b";
+    if (lp === "low") return "#059669";
+    return "#9ca3af";
   };
 
   return (
@@ -216,8 +216,8 @@ function DependencyGraph({ tickets, ticketColumns }) {
           <filter id="glow"><feGaussianBlur stdDeviation="4" result="coloredBlur" /><feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
         {edges.map((e, i) => { const dx = e.to.cx - e.from.cx, dy = e.to.cy - e.from.cy, dist = Math.sqrt(dx * dx + dy * dy) || 1; const x1 = e.from.cx + (dx / dist) * R, y1 = e.from.cy + (dy / dist) * R, x2 = e.to.cx - (dx / dist) * (R + 8), y2 = e.to.cy - (dy / dist) * (R + 8); const mx = (x1 + x2) / 2 - dy * 0.25, my = (y1 + y2) / 2 + dx * 0.25; return (<g key={i}><path d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke="#6366f120" strokeWidth={8} /><path d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#arrow)" style={{ filter: "url(#glow)" }}><animate attributeName="stroke-dashoffset" from="100" to="0" dur="3s" repeatCount="indefinite" /></path></g>); })}
-        {nodes.map((n) => { const color = getNodeColor(n), col = ticketColumns[n.id]; return (<g key={n.id}><circle cx={n.cx} cy={n.cy} r={R + 7} fill="none" stroke={color} strokeWidth={1} opacity={0.2} /><circle cx={n.cx} cy={n.cy} r={R} fill="#0c1018" stroke={color} strokeWidth={2} style={{ filter: "url(#glow)" }} />{col === "completed" && <text x={n.cx + R - 4} y={n.cy - R + 8} textAnchor="middle" fill="#22c55e" fontSize={12} fontWeight="bold">✓</text>}{col === "not_completed" && <text x={n.cx + R - 4} y={n.cy - R + 8} textAnchor="middle" fill="#ef4444" fontSize={12} fontWeight="bold">✗</text>}<text x={n.cx} y={n.cy - 6} textAnchor="middle" fill={color} fontSize={12} fontFamily="'JetBrains Mono', monospace" fontWeight="700">#{n.id}</text><text x={n.cx} y={n.cy + 10} textAnchor="middle" fill="#94a3b8" fontSize={9} fontFamily="'JetBrains Mono', monospace">{(n.task || "untitled").length > 10 ? (n.task || "untitled").slice(0, 10) + "…" : n.task || "untitled"}</text></g>); })}
-        {tickets.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fill="#1e293b" fontSize={13}>No tickets yet</text>}
+        {nodes.map((n) => { const color = getNodeColor(n), col = ticketColumns[n.id]; return (<g key={n.id}><circle cx={n.cx} cy={n.cy} r={R + 7} fill="none" stroke={color} strokeWidth={1} opacity={0.15} /><circle cx={n.cx} cy={n.cy} r={R} fill="var(--bg-surface, #fff)" stroke={color} strokeWidth={2} style={{ filter: "url(#glow)" }} />{col === "completed" && <text x={n.cx + R - 4} y={n.cy - R + 8} textAnchor="middle" fill="#059669" fontSize={12} fontWeight="bold">✓</text>}{col === "not_completed" && <text x={n.cx + R - 4} y={n.cy - R + 8} textAnchor="middle" fill="#dc2626" fontSize={12} fontWeight="bold">✗</text>}<text x={n.cx} y={n.cy - 6} textAnchor="middle" fill={color} fontSize={12} fontFamily="'JetBrains Mono', monospace" fontWeight="700">#{n.id}</text><text x={n.cx} y={n.cy + 10} textAnchor="middle" fill="var(--text-muted, #6b7280)" fontSize={9} fontFamily="'JetBrains Mono', monospace">{(n.task || "untitled").length > 10 ? (n.task || "untitled").slice(0, 10) + "…" : n.task || "untitled"}</text></g>); })}
+        {tickets.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fill="var(--text-muted, #9ca3af)" fontSize={13}>No tickets yet</text>}
       </svg>
     </div>
   );
@@ -360,6 +360,9 @@ function AdminDashboard({ token, addToast, onLogout, theme, toggleTheme }) {
       const data = await res.json();
       if (!res.ok) { addToast("error", data.detail); return; }
       addToast("success", data.message);
+      if (data.tickets_created > 0) {
+        addToast("success", `🎫 ${data.tickets_created} ticket${data.tickets_created > 1 ? "s" : ""} auto-created from meeting notes`);
+      }
       setCreatedMeetLink(null);
       if (data.ai_summary) setEndingSummary(data.ai_summary);
       fetchMeetings();
@@ -373,6 +376,22 @@ function AdminDashboard({ token, addToast, onLogout, theme, toggleTheme }) {
       const data = await res.json();
       setMeetingHistory(data.meetings || []);
     } catch { /* silent */ }
+  };
+
+  const deleteMeeting = async (meetingId) => {
+    if (!confirm("Delete this meeting from history?")) return;
+    try {
+      const res = await fetch(`${API}/admin/meetings/${meetingId}`, {
+        method: "DELETE", headers: authHeaders(token),
+      });
+      if (res.ok) {
+        addToast("success", "Meeting deleted");
+        fetchMeetingHistory();
+      } else {
+        const data = await res.json();
+        addToast("error", data.detail || "Failed to delete meeting");
+      }
+    } catch { addToast("error", "Failed to delete meeting"); }
   };
 
   const copyLink = (link) => {
@@ -561,10 +580,11 @@ function AdminDashboard({ token, addToast, onLogout, theme, toggleTheme }) {
             {meetingHistory.map((m) => (
               <div key={m.id} className={`meeting-history-card ${expandedHistory === m.id ? "expanded" : ""}`}>
                 <div className="meeting-history-header" onClick={() => setExpandedHistory(expandedHistory === m.id ? null : m.id)}>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div className="active-meeting-title">{m.title}</div>
                     <div className="active-meeting-meta">{m.workspace_name} · {m.notes_count} notes · {m.ended_at?.slice(0, 10)}</div>
                   </div>
+                  <button className="btn btn-ghost btn-delete-ws" onClick={(e) => { e.stopPropagation(); deleteMeeting(m.id); }} title="Delete meeting">🗑</button>
                   <span className="ws-expand-icon">{expandedHistory === m.id ? "▲" : "▼"}</span>
                 </div>
                 {expandedHistory === m.id && (
@@ -703,12 +723,12 @@ function WorkspaceSelector({ token, addToast, onSelect, onLogout, theme, toggleT
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [userEmail, setUserEmail] = useState(localStorage.getItem("email") || "");
-  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
 
   useEffect(() => {
-    document.body.classList.toggle("light", theme === "light");
+    document.body.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
 

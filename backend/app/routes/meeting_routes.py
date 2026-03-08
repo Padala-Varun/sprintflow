@@ -4,9 +4,10 @@ from bson import ObjectId
 from datetime import datetime
 import re
 import os
+import json
 from google import genai
 from app.routes.auth_routes import verify_token
-from app.database import users_collection, workspaces_collection, meetings_collection
+from app.database import users_collection, workspaces_collection, meetings_collection, boards_collection
 
 router = APIRouter(tags=["meetings"])
 
@@ -97,7 +98,7 @@ def create_meeting(data: CreateMeeting, authorization: str = Header(None)):
 
 @router.post("/admin/meetings/{meeting_id}/end")
 def end_meeting(meeting_id: str, authorization: str = Header(None)):
-    """End an active meeting and generate AI summary from notes (admin only)."""
+    """End an active meeting, generate AI summary, and auto-create tickets from notes."""
     require_admin(authorization)
 
     meeting = meetings_collection.find_one({"_id": ObjectId(meeting_id)})
@@ -110,6 +111,7 @@ def end_meeting(meeting_id: str, authorization: str = Header(None)):
     # Combine all notes and generate AI summary
     notes = meeting.get("notes", [])
     ai_summary = ""
+    tickets_created = 0
 
     if notes:
         # Build transcript
@@ -118,16 +120,126 @@ def end_meeting(meeting_id: str, authorization: str = Header(None)):
             transcript_lines.append(f"[{note['user_email']}] ({note['timestamp']}): {note['text']}")
         full_transcript = "\n".join(transcript_lines)
 
-        # Generate AI summary
+        # ── 1. Generate AI summary ──
+        summary_prompt = (
+            "You are a standup meeting assistant. Summarize this meeting transcript.\n"
+            "Highlight key updates, blockers, and decisions.\n\n"
+            f"Transcript:\n{full_transcript}"
+        )
         try:
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
-                contents=prompt,
+                contents=summary_prompt,
             )
             ai_summary = response.text
         except Exception as e:
-            print(f"[AI Summary Error] {e}")
+            print(f"[AI Summary Error] {type(e).__name__}: {e}")
             ai_summary = "AI summary could not be generated."
+
+        # ── 2. Extract action items per user and auto-create tickets ──
+        # Build a user_id -> email mapping from notes
+        user_map = {}
+        for note in notes:
+            uid = note.get("user_id")
+            if uid and uid not in user_map:
+                user_map[uid] = note["user_email"]
+
+        extraction_prompt = (
+            "You are a project management assistant. Analyze these standup meeting notes "
+            "and extract specific ACTION ITEMS (tasks that someone committed to doing).\n\n"
+            "Rules:\n"
+            "- Only extract tasks that a person said THEY WILL DO (commitments, not updates about past work)\n"
+            "- Assign a priority: high, medium, or low\n"
+            "- Ignore greetings, status updates about completed work, and general chat\n"
+            "- If no action items exist for a user, omit them\n\n"
+            f"Participant mapping (user_id -> email):\n"
+        )
+        for uid, email in user_map.items():
+            extraction_prompt += f"  {uid} = {email}\n"
+
+        extraction_prompt += (
+            f"\nTranscript:\n{full_transcript}\n\n"
+            "Return ONLY valid JSON (no markdown, no explanation) in this exact format:\n"
+            '{"action_items": {"<user_id>": [{"task": "...", "priority": "high|medium|low"}]}}\n'
+            "If there are no action items at all, return: {\"action_items\": {}}\n"
+        )
+
+        try:
+            print(f"[Action Items] Extracting for {len(user_map)} users...")
+            extraction_response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=extraction_prompt,
+            )
+            raw = extraction_response.text.strip()
+            print(f"[Action Items] Raw AI response: {raw[:500]}")
+
+            # Parse JSON — handle markdown code blocks
+            if raw.startswith("```"):
+                raw = re.sub(r'^```(?:json)?\s*', '', raw)
+                raw = re.sub(r'\s*```$', '', raw)
+
+            parsed = json.loads(raw)
+            action_items = parsed.get("action_items", {})
+            print(f"[Action Items] Found items for {len(action_items)} users")
+
+            workspace_id = meeting["workspace_id"]
+
+            for user_id, tasks in action_items.items():
+                if not tasks or not isinstance(tasks, list):
+                    continue
+
+                print(f"[Action Items] Creating {len(tasks)} tickets for user {user_id}")
+
+                # Load user's existing board
+                board = boards_collection.find_one(
+                    {"workspace_id": workspace_id, "user_id": user_id}
+                )
+
+                existing_tickets = board.get("tickets", []) if board else []
+                existing_columns = board.get("columns", {}) if board else {}
+                existing_order = board.get("execution_order", []) if board else []
+
+                # Find next ticket ID
+                max_id = max((t["id"] for t in existing_tickets), default=0)
+
+                new_tickets = []
+                new_columns = dict(existing_columns)
+
+                for item in tasks:
+                    if not isinstance(item, dict) or "task" not in item:
+                        continue
+                    max_id += 1
+                    ticket = {
+                        "id": max_id,
+                        "task": item["task"],
+                        "deadline": "",
+                        "priority": item.get("priority", "medium"),
+                        "dependency": 0,
+                        "status": "pending",
+                    }
+                    new_tickets.append(ticket)
+                    new_columns[str(max_id)] = "created"
+
+                if new_tickets:
+                    all_tickets = existing_tickets + new_tickets
+                    boards_collection.update_one(
+                        {"workspace_id": workspace_id, "user_id": user_id},
+                        {"$set": {
+                            "workspace_id": workspace_id,
+                            "user_id": user_id,
+                            "tickets": all_tickets,
+                            "columns": new_columns,
+                            "execution_order": existing_order,
+                        }},
+                        upsert=True,
+                    )
+                    tickets_created += len(new_tickets)
+                    print(f"[Action Items] Saved {len(new_tickets)} tickets for user {user_id}")
+
+        except json.JSONDecodeError as e:
+            print(f"[Action Item Parse Error] {e}")
+        except Exception as e:
+            print(f"[Action Item Extraction Error] {type(e).__name__}: {e}")
 
     meetings_collection.update_one(
         {"_id": ObjectId(meeting_id)},
@@ -142,7 +254,20 @@ def end_meeting(meeting_id: str, authorization: str = Header(None)):
         "message": "Meeting ended",
         "ai_summary": ai_summary,
         "notes_count": len(notes),
+        "tickets_created": tickets_created,
     }
+
+
+@router.delete("/admin/meetings/{meeting_id}")
+def delete_meeting(meeting_id: str, authorization: str = Header(None)):
+    """Delete a meeting from history (admin only)."""
+    require_admin(authorization)
+
+    result = meetings_collection.delete_one({"_id": ObjectId(meeting_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    return {"message": "Meeting deleted"}
 
 
 @router.get("/admin/meetings")

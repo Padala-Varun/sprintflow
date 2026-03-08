@@ -1,0 +1,104 @@
+flowchart TD
+    %% Styling
+    classDef frontend fill:#3b82f6,stroke:#1e3a8a,stroke-width:2px,color:#fff
+    classDef backend fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
+    classDef database fill:#f59e0b,stroke:#78350f,stroke-width:2px,color:#fff
+    classDef external fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff
+    classDef userbox fill:#64748b,stroke:#0f172a,stroke-width:2px,color:#fff
+
+    subgraph Users ["👥 Users"]
+        Admin(["Admin User"]):::userbox
+        Regular(["Regular User"]):::userbox
+    end
+
+    subgraph Frontend ["💻 Frontend (React / Vite)"]
+        UI_Login["Login / Registration UI"]:::frontend
+        UI_Dashboard["Dashboard / Navigation"]:::frontend
+        UI_Workspace["Workspace Board"]:::frontend
+        UI_Ticket["Ticket Management"]:::frontend
+        UI_Meeting["Meeting & Transcription UI"]:::frontend
+        UI_Admin["Admin Panel"]:::frontend
+        
+        State_Auth["Auth Context"]:::frontend
+        State_Data["Data Context / Hooks"]:::frontend
+    end
+
+    subgraph Backend ["⚙️ FastAPI Backend"]
+        API_Gateway{"FastAPI (main.py)"}:::backend
+        
+        subgraph Routes ["API Routes"]
+            R_Auth["/auth"]:::backend
+            R_Workspace["/workspaces"]:::backend
+            R_Ticket["/tickets"]:::backend
+            R_Status["/status"]:::backend
+            R_Admin["/admin"]:::backend
+            R_Meeting["/meetings"]:::backend
+            R_GitHub["/github"]:::backend
+            R_AI["/ai"]:::backend
+        end
+        
+        subgraph Services ["Core Services & Agents"]
+            S_Auth["Auth Service (JWT)"]:::backend
+            S_AI["AI Priority Agent"]:::backend
+            S_Transc["Speech-to-Text & Summarization"]:::backend
+            S_GithubHooks["GitHub Webhook Processor"]:::backend
+        end
+    end
+
+    subgraph Database ["🗄️ MongoDB Atlas"]
+        DB_Users[("Users Collection")]:::database
+        DB_Workspaces[("Workspaces & Invites")]:::database
+        DB_Tickets[("Tickets Collection")]:::database
+        DB_Statuses[("Statuses Collection")]:::database
+        DB_Meetings[("Meetings Collection")]:::database
+    end
+
+    subgraph External ["🌐 External Services"]
+        Ext_Gemini["Google Gemini AI API"]:::external
+        Ext_GitHub["GitHub API"]:::external
+    end
+
+    %% User Interactions
+    Admin -->|Manages| UI_Admin
+    Regular -->|Logs in| UI_Login
+    Regular -->|Views| UI_Workspace
+    Regular -->|Records Notebooks| UI_Meeting
+    
+    %% Frontend internal flow
+    UI_Login -->|Updates| State_Auth
+    UI_Dashboard -->|Uses| State_Data
+    UI_Admin -->|API Calls| API_Gateway
+    UI_Workspace -->|API Calls| API_Gateway
+    UI_Ticket -->|API Calls| API_Gateway
+    UI_Meeting -->|API Calls| API_Gateway
+
+    %% Gateway to Routes
+    API_Gateway --> R_Auth
+    API_Gateway --> R_Workspace
+    API_Gateway --> R_Ticket
+    API_Gateway --> R_Status
+    API_Gateway --> R_Admin
+    API_Gateway --> R_Meeting
+    API_Gateway --> R_GitHub
+    API_Gateway --> R_AI
+
+    %% Routes to Services & DB
+    R_Auth --> S_Auth
+    S_Auth --> DB_Users
+    
+    R_Workspace --> DB_Workspaces
+    R_Ticket --> DB_Tickets
+    R_Status --> DB_Statuses
+    R_Admin --> DB_Users
+    
+    R_Meeting --> S_Transc
+    S_Transc --> Ext_Gemini
+    S_Transc --> DB_Meetings
+    
+    R_AI --> S_AI
+    S_AI --> Ext_Gemini
+    S_AI --> DB_Tickets
+    
+    R_GitHub --> S_GithubHooks
+    S_GithubHooks <-->|Sync Commits/PRs| Ext_GitHub
+    S_GithubHooks --> DB_Tickets
